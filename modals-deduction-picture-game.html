@@ -1,0 +1,108 @@
+<!DOCTYPE html>
+<html lang="en"><head><meta charset="UTF-8"><meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Modals of Deduction – Picture Game</title>
+<style>
+*{box-sizing:border-box}body{margin:0;font-family:"Trebuchet MS",Arial,sans-serif;background:linear-gradient(135deg,#a1c4fd,#c2e9fb 50%,#ffe29f);min-height:100vh;display:flex;justify-content:center;padding:12px;color:#2b3a55}
+.card{background:#fff;border-radius:24px;max-width:760px;width:100%;padding:20px;box-shadow:0 12px 35px rgba(0,0,0,.2)}
+h1{margin:0;text-align:center;color:#1c7ed6;font-size:1.6rem}h2{color:#1c7ed6;margin:14px 0 6px}
+.school{text-align:center;font-size:.9rem;color:#6c5ce7;margin-bottom:8px}
+.bar{height:14px;background:#eee;border-radius:10px;overflow:hidden;margin:8px 0}.bar div{height:100%;background:linear-gradient(90deg,#51cf66,#fcc419);transition:width .5s}
+.info{display:flex;justify-content:space-between;font-weight:bold}
+.emoji{font-size:4.5rem;text-align:center;animation:bob 2s infinite}@keyframes bob{50%{transform:translateY(-8px) rotate(4deg)}}
+.q{font-size:1.3rem;text-align:center;margin:8px 0 14px;font-weight:bold;line-height:1.6}
+.gap{display:inline-block;min-width:90px;border-bottom:4px dashed #e8590c;color:#e8590c}.gap.f{border-bottom-style:solid}
+.opts{display:grid;gap:10px}
+.opt,.btn{font-size:1.2rem;padding:13px;border:none;border-radius:16px;color:#fff;font-weight:bold;cursor:pointer;transition:transform .15s;background:#4dabf7;box-shadow:0 5px 0 #1c7ed6}
+.opt:nth-child(2){background:#f783ac;box-shadow:0 5px 0 #e64980}.opt:nth-child(3){background:#69db7c;box-shadow:0 5px 0 #40c057}
+.opt:hover,.btn:hover{transform:scale(1.04)}.opt.right{background:#2f9e44!important;animation:pop .6s}.opt.wrong{background:#e03131!important;animation:shake .5s}
+@keyframes pop{50%{transform:scale(1.15)}}@keyframes shake{25%{transform:translateX(-10px)}75%{transform:translateX(10px)}}
+.btn{display:block;margin:12px auto;padding:12px 34px;background:#e8590c;box-shadow:0 5px 0 #c2410c}
+.fb{min-height:56px;text-align:center;font-size:1.05rem;margin-top:10px;font-weight:bold}
+.center{text-align:center}.credit{text-align:center;font-size:.85rem;margin-top:14px;color:#868e96}
+.grid{display:grid;gap:10px}.mc{border-radius:16px;padding:12px;color:#fff;cursor:pointer;text-align:center;transition:transform .2s}.mc:hover{transform:scale(1.03)}
+.mc b{font-size:1.4rem}.mc .ex{display:none;background:rgba(255,255,255,.95);color:#333;border-radius:12px;padding:8px;margin-top:8px;font-size:1.05rem}.mc.open .ex{display:block}
+.spec{height:18px;border-radius:10px;background:linear-gradient(90deg,#2f9e44,#f59f00,#e03131);margin:10px 0 2px}
+.spec+div{display:flex;justify-content:space-between;font-size:.8rem;font-weight:bold}
+.rev{background:#fff4e6;border-radius:12px;padding:8px;margin:6px 0}
+.tip{background:#e7f5ff;border-radius:14px;padding:10px;margin:8px 0}
+canvas{position:fixed;inset:0;pointer-events:none;z-index:9}
+@media print{body{background:#fff}.noprint,canvas{display:none!important}.card{box-shadow:none}}
+</style></head><body><canvas id="cv"></canvas><div class="card" id="app"></div>
+<script>
+const Q=[
+{e:"🦔",c:"It has spines.",s:"It ___ be a hedgehog.",o:["must","can't"],a:0,w:"Spines = 100% sure → must."},
+{e:"🐢",c:"It has scales.",s:"It ___ have fur.",o:["must","can't"],a:1,w:"Scales means no fur → can't (0%)."},
+{e:"😱",c:"He is shaking and pale.",s:"He ___ be scared.",o:["must","can't"],a:0,w:"Strong clue → must."},
+{e:"🌳❓",c:"I hear a sound, but I can't see it.",s:"It ___ be a bird.",o:["must","might"],a:1,w:"No clear clue → might (50%)."},
+{e:"🦔",c:"It has spines.",s:"It ___ be a bird.",o:["must","can't"],a:1,w:"Birds don't have spines → can't."},
+{e:"🐱",c:"It has soft fur and whiskers.",s:"It ___ have fur.",o:["must","can't"],a:0,w:"Fur is the clue → must."},
+{e:"🐢",c:"It has scales.",s:"It ___ be a hedgehog.",o:["must","can't","may"],a:1,w:"Scales ≠ spines → can't."},
+{e:"🌳❓",c:"I hear a tweet, but I can't see it.",s:"It ___ be a bird.",o:["can't","could","must"],a:1,w:"A tweet is a hint but not proof → could."},
+{e:"🦔",c:"It must ___ spines. (have = it owns something)",s:"It must ___ spines.",o:["be","have"],a:1,w:"Owning something → have."},
+{e:"🐦",c:"It is a bird. (be = description)",s:"It must ___ a bird.",o:["be","have"],a:0,w:"Description → be."},
+{e:"🐱",c:"It may be a cat.",s:"It could ___ fur.",o:["be","have"],a:1,w:"Fur is owned → have."},
+{e:"⚠️",c:"Choose the correct sentence.",s:"It might ___ a bird.",o:["have","be","to be"],a:1,w:"Common mistake: NOT 'might have a bird' → 'might be a bird'."},
+{e:"🚫",c:"It has spines.",s:"It ___ be a bird.",o:["mustn't","can't","might not"],a:1,w:"For deduction we say can't, not mustn't."}
+];
+const N=Q.length,app=document.getElementById('app');
+let i=0,score=0,wrong=[],locked=false,ac,name='',order=[];
+function snd(f,d=.15,t='sine'){try{ac=ac||new(window.AudioContext||window.webkitAudioContext)();const o=ac.createOscillator(),g=ac.createGain();o.type=t;o.frequency.value=f;g.gain.value=.15;o.connect(g);g.connect(ac.destination);o.start();o.stop(ac.currentTime+d)}catch(e){}}
+function good(){[523,659,784].forEach((f,k)=>setTimeout(()=>snd(f),k*110))}
+function bad(){snd(200,.3,'sawtooth')}
+function say(t){try{const u=new SpeechSynthesisUtterance(t);u.lang='en-US';u.rate=.9;speechSynthesis.cancel();speechSynthesis.speak(u)}catch(e){}}
+function esc(t){return t.replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]))}
+function home(){app.innerHTML=`<h1>🦔 Modals of Deduction 🕵️</h1><div class="school">Khawlah Bint Thalabah (5-9) • Grade 7</div>
+<div class="emoji">🔍</div><div class="center"><b>Look at the clue, then decide!</b><br>may • might • could • can't • must</div>
+<div class="center" style="margin-top:12px"><b>✏️ Write your name first:</b><br><input id="nm" value="${esc(name)}" maxlength="40" placeholder="Student name" oninput="go.disabled=!this.value.trim()" style="font-size:1.3rem;padding:10px;border:3px solid #6c5ce7;border-radius:14px;text-align:center;width:90%;max-width:360px;margin-top:6px"></div>
+<button class="btn" id="go" onclick="begin()" ${name.trim()?'':'disabled'}>Start ▶</button><div class="credit">Created by T.Badria Alfalahi ❤️🌸</div>`}
+function begin(){const v=document.getElementById('nm').value.trim();if(!v)return;name=v;scormInit();learn()}
+function learn(){app.innerHTML=`<h1>📘 Learn first</h1><div class="center">Tap each card!</div>
+<div class="spec"></div><div><span>must (100%)</span><span>may / might / could (50%)</span><span>can't (0%)</span></div>
+<div class="grid" style="margin-top:10px">
+<div class="mc" style="background:#2f9e44" onclick="this.classList.toggle('open');snd(660)"><b>must</b> – 100% sure ✔️<div class="ex">🦔 Clue: It has spines.<br><b>It must be a hedgehog.</b><br>😱 He is shaking and pale.<br><b>He must be scared.</b></div></div>
+<div class="mc" style="background:#f08c00" onclick="this.classList.toggle('open');snd(520)"><b>may / might / could</b> – maybe ❓<div class="ex">🌳❓ I hear a tweet, but I can't see it.<br><b>It may / might / could be a bird.</b></div></div>
+<div class="mc" style="background:#e03131" onclick="this.classList.toggle('open');snd(330)"><b>can't</b> – 100% sure it is NOT true ✖️<div class="ex">🐢 It has scales.<br><b>It can't have fur.</b><br>🦔 It has spines. <b>It can't be a bird.</b></div></div></div>
+<div class="tip"><b>be or have?</b><br>Subject + modal + <b>be</b> (a bird, scared, right) 🐦<br>Subject + modal + <b>have</b> (fur, scales, spines) 🦔<br>❌ It might have a bird. ✅ It might be a bird.<br>To say NO in deduction use <b>can't</b>, not mustn't.</div>
+<button class="btn" onclick="startQ()">Let's play! 🎮</button><div class="credit">Created by T.Badria Alfalahi ❤️🌸</div>`}
+function startQ(){i=0;score=0;wrong=[];show()}
+function show(){locked=false;const q=Q[i];
+app.innerHTML=`<h1>🕵️ Detective Quiz</h1><div class="info"><span>Question ${i+1}/${N}</span><span>⭐ ${score}</span></div>
+<div class="bar"><div style="width:${i/N*100}%"></div></div><div class="emoji">${q.e}</div>
+<div class="q"><span style="color:#868e96">Clue: ${q.c}</span><br>${q.s.replace('___','<span class="gap" id="gap">&nbsp;</span>')}</div>
+<div class="opts">${q.o.map((x,k)=>`<button class="opt" onclick="pick(${k},this)">${x}</button>`).join('')}</div>
+<div class="fb" id="fb"></div><button class="btn" id="nx" style="display:none" onclick="nxt()">${i==N-1?'See my result 🏆':'Next ➡'}</button>
+<div class="credit">Created by T.Badria Alfalahi ❤️🌸</div>`;setTimeout(()=>say(q.c+' '+q.s.replace('___','blank')),300)}
+function pick(k,b){if(locked)return;locked=true;const q=Q[i],bs=document.querySelectorAll('.opt');bs.forEach(x=>x.disabled=true);
+const g=document.getElementById('gap');g.textContent=q.o[q.a];g.classList.add('f');const fb=document.getElementById('fb');
+if(k==q.a){score++;b.classList.add('right');good();boom();fb.innerHTML='🎉 Correct! '+q.w;say(q.s.replace('___',q.o[q.a]))}
+else{wrong.push(i);b.classList.add('wrong');bs[q.a].classList.add('right');bad();fb.innerHTML=`❌ Not quite. The answer is <span style="color:#2f9e44">${q.o[q.a]}</span>.<br>${q.w}`}
+document.getElementById('nx').style.display='block'}
+function nxt(){i++;i<N?show():end()}
+function stars(){return score>=N*.85?'⭐⭐⭐':score>=N*.6?'⭐⭐':'⭐'}
+function end(){scormFinish();
+app.innerHTML=`<h1>🏆 Well done, ${esc(name)}!</h1><div class="center" style="font-size:3rem">${stars()}</div>
+<div class="center" style="font-size:2rem;font-weight:bold">${score} / ${N}</div>
+<div class="center">${score>=N*.85?'Super detective! 🕵️':score>=N*.6?'Very good! Keep practising! 🦔':'Nice try! Read the clues again! 🔍'}</div>
+${wrong.length?'<h3>Review your mistakes:</h3>'+wrong.map(n=>`<div class="rev">${Q[n].e} ${Q[n].c}<br>${Q[n].s.replace('___','<b style="color:#2f9e44">'+Q[n].o[Q[n].a]+'</b>')}</div>`).join(''):''}
+<button class="btn" onclick="cert()">🎓 Get my certificate</button><button class="btn" style="background:#6c5ce7" onclick="learn()">📘 Review the rules</button><button class="btn" style="background:#1c7ed6" onclick="startQ()">Play again 🔄</button>
+<div class="credit">Created by T.Badria Alfalahi ❤️🌸</div>`;good();for(let k=0;k<4;k++)setTimeout(boom,k*400)}
+function cert(){const d=new Date().toLocaleDateString('en-GB',{day:'numeric',month:'long',year:'numeric'});
+app.innerHTML=`<div style="border:10px double #1c7ed6;border-radius:18px;padding:20px 12px;text-align:center;background:linear-gradient(#f1f8ff,#fffbe6)">
+<div style="font-size:3rem">🏅</div><div style="color:#6c5ce7;font-weight:bold">Khawlah Bint Thalabah (5-9)</div>
+<h1 style="font-size:2rem;margin:6px 0">Certificate of Appreciation</h1><div>This certificate is proudly presented to</div>
+<div style="font-size:2.2rem;font-weight:bold;color:#e8590c;border-bottom:3px dashed #e8590c;display:inline-block;padding:4px 20px;margin:10px 0;font-family:Georgia,serif">${esc(name)}</div>
+<div style="font-size:1.1rem">for completing the <b>Grade 7 Modals of Deduction Game</b><br>(may, might, could, can't, must) with a score of <b>${score} / ${N}</b> ${stars()}</div>
+<div style="margin-top:14px">Excellent effort! Keep learning and keep shining! 🌟</div>
+<div style="display:flex;justify-content:space-between;margin-top:20px;font-size:.95rem"><span>Date: ${d}</span><span>Teacher: T.Badria Alfalahi 🌸</span></div></div>
+<button class="btn noprint" onclick="window.print()">🖨️ Print certificate</button><button class="btn noprint" style="background:#6c5ce7" onclick="end()">⬅ Back</button>`;boom()}
+let api=null,inited=false;
+function findAPI(w){let n=0;while(w&&!w.API&&w.parent&&w.parent!==w&&n++<500)w=w.parent;return w&&w.API?w.API:null}
+function scormInit(){try{api=findAPI(window)||(window.opener?findAPI(window.opener):null);if(api&&!inited){inited=true;api.LMSInitialize("");api.LMSSetValue("cmi.core.lesson_status","incomplete");api.LMSCommit("")}}catch(e){}}
+function scormFinish(){try{if(!api)return;api.LMSSetValue("cmi.core.score.min","0");api.LMSSetValue("cmi.core.score.max","100");api.LMSSetValue("cmi.core.score.raw",String(Math.round(score/N*100)));api.LMSSetValue("cmi.core.lesson_status",score>=N*.6?"passed":"failed");api.LMSCommit("")}catch(e){}}
+addEventListener('beforeunload',()=>{try{if(api&&inited)api.LMSFinish("")}catch(e){}});
+const cv=document.getElementById('cv'),cx=cv.getContext('2d');let ps=[];
+function rs(){cv.width=innerWidth;cv.height=innerHeight}rs();addEventListener('resize',rs);
+function boom(){for(let k=0;k<50;k++)ps.push({x:innerWidth/2,y:innerHeight/3,vx:(Math.random()-.5)*14,vy:Math.random()*-12,c:`hsl(${Math.random()*360},90%,60%)`,l:70});if(ps.length==50)loop()}
+function loop(){cx.clearRect(0,0,cv.width,cv.height);ps.forEach(p=>{p.x+=p.vx;p.y+=p.vy;p.vy+=.4;p.l--;cx.fillStyle=p.c;cx.fillRect(p.x,p.y,8,8)});ps=ps.filter(p=>p.l>0);if(ps.length)requestAnimationFrame(loop);else cx.clearRect(0,0,cv.width,cv.height)}
+home();
+</script></body></html>
